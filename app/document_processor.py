@@ -33,13 +33,14 @@ class DocumentProcessor:
         """Initialize the document processor and database."""
         await self.db.initialize()
         
-    async def process_document(self, content: bytes, metadata: dict = None) -> Tuple[str, str]:
+    async def process_document(self, content: bytes, metadata: dict = None, document_id: str = None) -> Tuple[str, str]:
         """
         Process a document and generate summary and embeddings.
         
         Args:
             content: Raw document content in bytes
             metadata: Optional metadata about the document
+            document_id: ID of the document in the documents table
             
         Returns:
             Tuple containing (document_id, summary)
@@ -65,7 +66,8 @@ class DocumentProcessor:
                 content=text,
                 summary=summary,
                 embeddings=embeddings,
-                metadata=metadata
+                metadata=metadata,
+                document_id=document_id
             )
             
             return doc_id, summary

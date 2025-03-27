@@ -36,9 +36,13 @@ async def startup_event():
     await document_processor.initialize()
 
 @app.post("/api/process-document")
-async def process_document(file: UploadFile = File(...)):
+async def process_document(file: UploadFile = File(...), document_id: str = None):
     """
     Process an uploaded document, generate summary and store embeddings.
+    
+    Args:
+        file: The uploaded file
+        document_id: ID of the document in the documents table
     """
     try:
         # Read file content
@@ -50,7 +54,8 @@ async def process_document(file: UploadFile = File(...)):
             metadata={
                 "filename": file.filename,
                 "content_type": file.content_type
-            }
+            },
+            document_id=document_id
         )
         
         return {

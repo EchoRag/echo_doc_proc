@@ -22,6 +22,7 @@ class VectorDatabase:
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS documents_proc (
                     id UUID PRIMARY KEY,
+                    document_id UUID REFERENCES documents(id),
                     content TEXT,
                     summary TEXT,
                     metadata JSONB,
@@ -41,7 +42,8 @@ class VectorDatabase:
         content: str,
         summary: str,
         embeddings: List[float],
-        metadata: Dict[str, Any]
+        metadata: Dict[str, Any],
+        document_id: str
     ) -> str:
         """
         Store document content, summary, embeddings and metadata in PostgreSQL.
@@ -51,6 +53,7 @@ class VectorDatabase:
             summary: Generated summary
             embeddings: List of embedding vectors
             metadata: Dictionary containing document metadata
+            document_id: ID of the document in the documents table
             
         Returns:
             str: Document ID
@@ -67,9 +70,9 @@ class VectorDatabase:
             
             async with self.pool.acquire() as conn:
                 await conn.execute('''
-                    INSERT INTO documents_proc (id, content, summary, metadata, embedding)
-                    VALUES ($1, $2, $3, $4::jsonb, $5::vector)
-                ''', doc_id, content, summary, metadata, embedding_vector)
+                    INSERT INTO documents_proc (id, document_id, content, summary, metadata, embedding)
+                    VALUES ($1, $2, $3, $4::jsonb, $5::vector, $6)
+                ''', doc_id, document_id, content, summary, metadata, embedding_vector)
             
             logger.info(f"Stored document with ID: {doc_id}")
             return doc_id
