@@ -1,0 +1,12 @@
+fastapi==0.109.2
+uvicorn==0.27.1
+python-multipart==0.0.9
+torch @ file:///home/keith/torch-2.4.0%2Brocm6.3.4.git7cecbf6d-cp312-cp312-linux_x86_64.whl#sha256=2aab0f6b105a8faee20daae826f034382b9bcd39c84f851b8f3d73b97ae404f5
+transformers==4.49.0
+sentence-transformers==2.5.1
+chromadb==0.4.22
+python-dotenv==1.0.1
+pydantic==2.6.1
+pytorch-triton-rocm @ file:///home/keith/pytorch_triton_rocm-3.0.0%2Brocm6.3.4.git75cc27c2-cp312-cp312-linux_x86_64.whl#sha256=7242b8caaae34d1854032f5811104b7ff3e5987c65fcca3422f2f37ec6958279
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
