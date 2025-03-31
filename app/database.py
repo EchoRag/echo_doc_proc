@@ -71,7 +71,7 @@ class VectorDatabase:
             async with self.pool.acquire() as conn:
                 await conn.execute('''
                     INSERT INTO documents_proc (id, document_id, content, summary, metadata, embedding)
-                    VALUES ($1, $2, $3, $4::jsonb, $5::vector, $6)
+                    VALUES ($1, $2, $3, $4, $5::jsonb, $6::vector)
                 ''', doc_id, document_id, content, summary, metadata, embedding_vector)
             
             logger.info(f"Stored document with ID: {doc_id}")

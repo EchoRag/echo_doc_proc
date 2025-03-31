@@ -5,6 +5,11 @@ import logging
 from typing import Tuple, List, Dict, Any
 import numpy as np
 from .database import VectorDatabase
+import io
+import pandas as pd
+from docx import Document
+from PyPDF2 import PdfReader
+import mimetypes
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +38,7 @@ class DocumentProcessor:
         """Initialize the document processor and database."""
         await self.db.initialize()
         
-    async def process_document(self, content: bytes, metadata: dict = None, document_id: str = None) -> Tuple[str, str]:
+    async def process_document(self, content: bytes, metadata: dict = None, document_id: str = None, content_type: str = None) -> Tuple[str, str]:
         """
         Process a document and generate summary and embeddings.
         
@@ -41,13 +46,14 @@ class DocumentProcessor:
             content: Raw document content in bytes
             metadata: Optional metadata about the document
             document_id: ID of the document in the documents table
+            content_type: MIME type of the document
             
         Returns:
             Tuple containing (document_id, summary)
         """
         try:
-            # Decode content (assuming UTF-8 encoding)
-            text = content.decode('utf-8')
+            # Extract text based on content type
+            text = await self._extract_text(content, content_type)
             
             # Generate summary
             summary = await self.summarize_text(text)
@@ -75,6 +81,64 @@ class DocumentProcessor:
         except Exception as e:
             logger.error(f"Error in document processing: {str(e)}")
             raise
+
+    async def _extract_text(self, content: bytes, content_type: str) -> str:
+        """
+        Extract text from different file types.
+        
+        Args:
+            content: Raw document content in bytes
+            content_type: MIME type of the document
+            
+        Returns:
+            Extracted text as string
+        """
+        if not content_type:
+            # Try to detect content type
+            content_type = mimetypes.guess_type(content)[0]
+            
+        if not content_type:
+            # Default to UTF-8 text if type cannot be detected
+            return content.decode('utf-8')
+            
+        if content_type == 'application/pdf':
+            return await self._extract_pdf_text(content)
+        elif content_type in ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel']:
+            return await self._extract_excel_text(content)
+        elif content_type == 'text/csv':
+            return await self._extract_csv_text(content)
+        elif content_type in ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword']:
+            return await self._extract_word_text(content)
+        else:
+            # Default to UTF-8 text for unknown types
+            return content.decode('utf-8')
+
+    async def _extract_pdf_text(self, content: bytes) -> str:
+        """Extract text from PDF files."""
+        pdf_file = io.BytesIO(content)
+        pdf_reader = PdfReader(pdf_file)
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text() + "\n"
+        return text
+
+    async def _extract_excel_text(self, content: bytes) -> str:
+        """Extract text from Excel files."""
+        excel_file = io.BytesIO(content)
+        df = pd.read_excel(excel_file)
+        return df.to_string()
+
+    async def _extract_csv_text(self, content: bytes) -> str:
+        """Extract text from CSV files."""
+        csv_file = io.BytesIO(content)
+        df = pd.read_csv(csv_file)
+        return df.to_string()
+
+    async def _extract_word_text(self, content: bytes) -> str:
+        """Extract text from Word files."""
+        doc_file = io.BytesIO(content)
+        doc = Document(doc_file)
+        return "\n".join([paragraph.text for paragraph in doc.paragraphs])
     
     async def _generate_summary(self, text: str) -> str:
         """
