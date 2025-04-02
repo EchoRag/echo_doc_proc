@@ -1,6 +1,5 @@
 import torch
 from transformers import AutoTokenizer, AutoModel, pipeline
-from sentence_transformers import SentenceTransformer
 import logging
 from typing import Tuple, List, Dict, Any
 import numpy as np
@@ -10,6 +9,7 @@ import pandas as pd
 from docx import Document
 from PyPDF2 import PdfReader
 import mimetypes
+import ollama
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +27,11 @@ class DocumentProcessor:
         # Set up model cache directory
         self.cache_dir = "./models/"
         
-        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device=self.device, cache_folder=self.cache_dir)
+        # Initialize Ollama client
+        self.ollama_client = ollama.Client()
+        
+        # Initialize tokenizer for summarization
         self.tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn", cache_dir=self.cache_dir)
-        # self.summarizer = AutoModel.from_pretrained("facebook/bart-large-cnn", cache_dir=self.cache_dir).to(self.device)
         
         # Initialize database
         self.db = VectorDatabase(db_connection_string)
@@ -155,11 +157,33 @@ class DocumentProcessor:
     
     async def _generate_embeddings(self, text: str) -> List[float]:
         """
-        Generate embeddings for the text using SentenceTransformer.
+        Generate embeddings for the text using Ollama's nomic-embed-text model.
+        This model is specifically designed for text embeddings and provides better quality
+        embeddings for document similarity search.
         """
-        # Split text into chunks if needed (SentenceTransformer handles this internally)
-        embeddings = self.embedding_model.encode(text, convert_to_numpy=True)
-        return embeddings.tolist()
+        try:
+            # Split text into chunks if needed (Ollama has a context window)
+            max_chunk_length = 8192  # nomic-embed-text has a larger context window
+            text_chunks = [text[i:i+max_chunk_length] for i in range(0, len(text), max_chunk_length)]
+            
+            # Generate embeddings for each chunk
+            all_embeddings = []
+            for chunk in text_chunks:
+                # Ollama client is synchronous, no need to await
+                response = self.ollama_client.embeddings(
+                    model="nomic-embed-text",
+                    prompt=chunk
+                )
+                all_embeddings.append(response['embedding'])
+            
+            # Average the embeddings if we have multiple chunks
+            if len(all_embeddings) > 1:
+                return np.mean(all_embeddings, axis=0).tolist()
+            return all_embeddings[0]
+            
+        except Exception as e:
+            logger.error(f"Error generating embeddings with Ollama: {str(e)}")
+            raise
         
     async def summarize_text(self, text) -> str:
         summarizer = pipeline("summarization",

@@ -26,7 +26,7 @@ class VectorDatabase:
                     content TEXT,
                     summary TEXT,
                     metadata JSONB,
-                    embedding vector(384)
+                    embedding vector(768)
                 )
             ''')
             

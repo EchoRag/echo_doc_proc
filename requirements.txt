@@ -3,7 +3,6 @@ uvicorn==0.27.1
 python-multipart==0.0.9
 torch @ file:///home/keith/torch-2.4.0%2Brocm6.3.4.git7cecbf6d-cp312-cp312-linux_x86_64.whl#sha256=2aab0f6b105a8faee20daae826f034382b9bcd39c84f851b8f3d73b97ae404f5
 transformers==4.49.0
-sentence-transformers==2.5.1
 chromadb==0.4.22
 python-dotenv==1.0.1
 pydantic==2.6.1
@@ -16,3 +15,4 @@ python-docx==1.1.0
 pandas==2.2.0
 openpyxl==3.1.2
 PyPDF2==3.0.1
+ollama==0.1.6
