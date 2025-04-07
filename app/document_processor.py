@@ -1,5 +1,5 @@
 import torch
-from transformers import AutoTokenizer, AutoModel, pipeline
+from transformers import pipeline
 import logging
 from typing import Tuple, List, Dict, Any
 import numpy as np
@@ -10,6 +10,8 @@ from docx import Document
 from PyPDF2 import PdfReader
 import mimetypes
 import ollama
+from semantic_text_splitter import TextSplitter
+from tokenizers import Tokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +31,11 @@ class DocumentProcessor:
         
         # Initialize Ollama client
         self.ollama_client = ollama.Client()
-        
         # Initialize tokenizer for summarization
-        self.tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn", cache_dir=self.cache_dir)
-        
+        max_tokens = 1000
+        self.tokenizer = Tokenizer.from_pretrained("bert-base-uncased")
+        # Initialize text splitter
+        self.text_splitter = TextSplitter.from_huggingface_tokenizer(self.tokenizer, max_tokens)
         # Initialize database
         self.db = VectorDatabase(db_connection_string)
         
@@ -60,8 +63,21 @@ class DocumentProcessor:
             # Generate summary
             summary = await self.summarize_text(text)
             
-            # Generate embeddings
-            embeddings = await self._generate_embeddings(text)
+            # Split text into semantic chunks
+            chunks = self.text_splitter.chunks(text)
+            
+            # Generate embeddings for each chunk
+            chunk_embeddings = []
+            for chunk in chunks:
+                embedding = await self._generate_embeddings(chunk)
+                chunk_embeddings.append({
+                    'text': chunk,
+                    'embedding': embedding,
+                    'metadata': {
+                        'chunk_size': len(chunk),
+                        'token_count': len(self.tokenizer.encode(chunk))
+                    }
+                })
             
             # Ensure metadata is a dictionary
             if metadata is None:
@@ -69,14 +85,16 @@ class DocumentProcessor:
             elif not isinstance(metadata, dict):
                 metadata = {"metadata": str(metadata)}
             
-            # Store in database
-            doc_id = await self.db.store_embeddings(
+            # Store document and chunks in database
+            doc_id = await self.db.store_document(
                 content=text,
                 summary=summary,
-                embeddings=embeddings,
                 metadata=metadata,
                 document_id=document_id
             )
+            
+            # Store chunks with their embeddings
+            await self.db.store_chunks(doc_id, chunk_embeddings)
             
             return doc_id, summary
             
@@ -162,24 +180,12 @@ class DocumentProcessor:
         embeddings for document similarity search.
         """
         try:
-            # Split text into chunks if needed (Ollama has a context window)
-            max_chunk_length = 8192  # nomic-embed-text has a larger context window
-            text_chunks = [text[i:i+max_chunk_length] for i in range(0, len(text), max_chunk_length)]
-            
-            # Generate embeddings for each chunk
-            all_embeddings = []
-            for chunk in text_chunks:
-                # Ollama client is synchronous, no need to await
-                response = self.ollama_client.embeddings(
-                    model="nomic-embed-text",
-                    prompt=chunk
-                )
-                all_embeddings.append(response['embedding'])
-            
-            # Average the embeddings if we have multiple chunks
-            if len(all_embeddings) > 1:
-                return np.mean(all_embeddings, axis=0).tolist()
-            return all_embeddings[0]
+            # Ollama client is synchronous, no need to await
+            response = self.ollama_client.embeddings(
+                model="nomic-embed-text",
+                prompt=text
+            )
+            return response['embedding']
             
         except Exception as e:
             logger.error(f"Error generating embeddings with Ollama: {str(e)}")
@@ -197,14 +203,14 @@ class DocumentProcessor:
         
     async def search_similar(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
         """
-        Search for similar documents using a text query.
+        Search for similar document chunks using a text query.
         
         Args:
             query: Text query to search for similar documents
             n_results: Number of results to return
             
         Returns:
-            List of similar documents with their metadata
+            List of similar document chunks with their metadata
         """
         query_embedding = await self._generate_embeddings(query)
         return await self.db.search_similar(query_embedding, n_results)
