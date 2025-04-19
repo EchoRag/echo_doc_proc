@@ -13,7 +13,7 @@ class VectorDatabase:
         
     async def initialize(self):
         """Initialize database connection and create necessary tables."""
-        self.pool = await asyncpg.create_pool(self.connection_string)
+        self.pool = await asyncpg.create_pool(self.connection_string,max_size=5,min_size=2)
         async with self.pool.acquire() as conn:
             # Enable pgvector extension
             await conn.execute('CREATE EXTENSION IF NOT EXISTS vector')

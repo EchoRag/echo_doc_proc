@@ -12,6 +12,9 @@ import mimetypes
 import ollama
 from semantic_text_splitter import TextSplitter
 from tokenizers import Tokenizer
+import aiohttp
+import os
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +41,37 @@ class DocumentProcessor:
         self.text_splitter = TextSplitter.from_huggingface_tokenizer(self.tokenizer, max_tokens)
         # Initialize database
         self.db = VectorDatabase(db_connection_string)
+    
+    
+
+    async def update_document_status(self, document_id: str, status: str, error_message: str = None) -> None:
+        """
+        Update document processing status via API.
+        
+        Args:
+            document_id: ID of the document to update
+            status: New status of the document
+            error_message: Optional error message if processing failed
+        """
+        try:
+            api_url = f"{os.getenv('API_URL')}/api/v1/document/{document_id}/status"
+            payload = {
+                "status": status,
+                "errorDescription": error_message
+            }
+            headers = {
+                "Authorization": f"Bearer {os.getenv('SERVICE_TOKEN')}"
+            }
+            
+            # Inject trace context into headers
+            propagator = TraceContextTextMapPropagator()
+            propagator.inject(headers)
+            async with aiohttp.ClientSession() as session:
+                async with session.put(api_url, json=payload, headers=headers) as response:
+                    if response.status != 200:
+                        logger.error(f"Failed to update document status: {response.status}")
+        except Exception as e:
+            logger.error(f"Error updating document status: {str(e)}")
         
     async def initialize(self):
         """Initialize the document processor and database."""
@@ -95,10 +129,11 @@ class DocumentProcessor:
             
             # Store chunks with their embeddings
             await self.db.store_chunks(doc_id, chunk_embeddings)
-            
+            await self.update_document_status(document_id, "processed")
             return doc_id, summary
             
         except Exception as e:
+            await self.update_document_status(document_id, "error", str(e))
             logger.error(f"Error in document processing: {str(e)}")
             raise
 

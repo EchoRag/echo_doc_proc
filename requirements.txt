@@ -17,3 +17,7 @@ openpyxl==3.1.2
 PyPDF2==3.0.1
 ollama
 semantic-text-splitter==0.25.1
+opentelemetry-instrumentation-fastapi
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-exporter-otlp
