@@ -103,6 +103,16 @@ async def process_message(message):
             document_id = body  # Assuming the message body is the document_id
             span.set_attribute("document_id", document_id)
             
+            # Get retry count from message headers
+            retry_count = int(message.headers.get('x-retry-count', 0))
+            max_retries = int(os.getenv('MAX_RETRIES', 3))
+            
+            if retry_count >= max_retries:
+                logger.error(f"Max retries ({max_retries}) exceeded for document {document_id}")
+                await document_processor.update_document_status(document_id, "failed", "Max retries exceeded")
+                await message.ack()  # Acknowledge to remove from queue
+                return
+            
             # Update document status to processing
             await document_processor.update_document_status(document_id, "processing")
             
@@ -134,12 +144,16 @@ async def process_message(message):
             # Update document status to failed
             await document_processor.update_document_status(document_id, "failed", str(e))
             
-            # Reject the message and requeue it
-            await message.nack(requeue=True)
-            logger.info(f"Message requeued for document_id: {document_id}")
-            
-            # Optionally, you can add a delay before retrying
-            # await asyncio.sleep(5)  # 5 second delay before retry
+            # Increment retry count and requeue if under max retries
+            retry_count += 1
+            if retry_count < max_retries:
+                # Requeue with updated retry count
+                await message.nack(requeue=True, headers={'x-retry-count': retry_count})
+                logger.info(f"Message requeued for document_id: {document_id} (retry {retry_count}/{max_retries})")
+            else:
+                # Max retries exceeded, acknowledge to remove from queue
+                await message.ack()
+                logger.error(f"Max retries exceeded for document {document_id}, removing from queue")
 
 async def start_rabbitmq_listener():
     """Start the RabbitMQ listener."""
