@@ -148,7 +148,7 @@ async def process_message(message):
             retry_count += 1
             if retry_count < max_retries:
                 # Requeue with updated retry count
-                await message.nack(requeue=True, headers={'x-retry-count': retry_count})
+                await message.nack(requeue=True)
                 logger.info(f"Message requeued for document_id: {document_id} (retry {retry_count}/{max_retries})")
             else:
                 # Max retries exceeded, acknowledge to remove from queue
