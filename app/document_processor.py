@@ -129,7 +129,6 @@ class DocumentProcessor:
             
             # Store chunks with their embeddings
             await self.db.store_chunks(doc_id, chunk_embeddings)
-            await self.update_document_status(document_id, "processed")
             return doc_id, summary
             
         except Exception as e:
