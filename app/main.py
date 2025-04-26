@@ -62,6 +62,10 @@ db_connection_string = os.getenv("DATABASE_URL")
 # Initialize components
 document_processor = DocumentProcessor(db_connection_string)
 
+# Store the queue and channel objects globally
+queue = None
+channel = None
+
 # Instrument FastAPI with OpenTelemetry
 FastAPIInstrumentor.instrument_app(app)
 
@@ -147,8 +151,17 @@ async def process_message(message):
             # Increment retry count and requeue if under max retries
             retry_count += 1
             if retry_count < max_retries:
-                # Requeue with updated retry count
-                await message.nack(requeue=True, headers={'x-retry-count': retry_count})
+                # Create a new message with updated retry count
+                await channel.default_exchange.publish(
+                    aio_pika.Message(
+                        body=message.body,
+                        headers={'x-retry-count': retry_count},
+                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                    ),
+                    routing_key=queue.name
+                )
+                # Acknowledge the original message
+                await message.ack()
                 logger.info(f"Message requeued for document_id: {document_id} (retry {retry_count}/{max_retries})")
             else:
                 # Max retries exceeded, acknowledge to remove from queue
@@ -157,6 +170,7 @@ async def process_message(message):
 
 async def start_rabbitmq_listener():
     """Start the RabbitMQ listener."""
+    global queue, channel
     # Connect to RabbitMQ
     connection = await aio_pika.connect_robust(os.getenv("RABBITMQ_URL",))
     channel = await connection.channel()
